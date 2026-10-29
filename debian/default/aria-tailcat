@@ -1,0 +1,16 @@
+# /etc/default/aria-tailcat
+# Override these values, then run: sudo systemctl restart aria-tailcat
+
+ARIA_TAILCAT_HOME=/var/lib/aria-tailcat
+
+# Config file (YAML). The package installs a template at
+# /etc/aria-tailcat/config.yaml and loads it by default; edit that file to set
+# your serve mode/ports, or point this at another path.
+ARIA_TAILCAT_CONFIG=/etc/aria-tailcat/config.yaml
+
+# Optional: override the DERP map URL (also consumed by tailcat via
+# TAILCAT_DERPMAP_URL).
+# ARIA_TAILCAT_DERPMAP_URL=https://tailcat.dev/derpmap.json
+
+# Optional: tailcat key name/path ('new' for ephemeral; 'default' for saved key).
+# ARIA_TAILCAT_KEY=default

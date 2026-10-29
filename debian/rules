@@ -19,6 +19,13 @@ override_dh_auto_test:
 override_dh_auto_clean:
 	rm -rf build
 
+# Systemd-only package: dh_installinit (SysV init scripts) is not needed. Without
+# an init script it would not install the /etc/default template anyway, so we
+# install debian/aria-tailcat.default -> /etc/default/aria-tailcat explicitly via
+# debian/install and disable dh_installinit to avoid any double-install across
+# debhelper versions.
+override_dh_installinit:
+
 # Keep the /etc/default env template root-only (may carry secrets later).
 override_dh_fixperms:
 	dh_fixperms

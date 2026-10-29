@@ -1,3 +1,4 @@
 build/aria-tailcat usr/bin/
 debian/aria-tailcat-service usr/lib/aria-tailcat/
+debian/default/aria-tailcat etc/default/
 config/config.yaml etc/aria-tailcat/
