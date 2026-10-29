@@ -45,3 +45,4 @@ serve:
   # Default: an example forward mode. Edit for your deployment.
   mode: forward
   forward: "8080"
+  full_address: true
