@@ -118,10 +118,11 @@ fi
 # Optional: forward a local port to the server's port and probe it.
 if [[ -n "${PORT:-}" ]]; then
   LP=18080
-  FWD_ARGS=(forward "$TC_ADDR" "$LP:$PORT")
+  FWD_ARGS=(forward)
   if [[ -n "$BIND" ]]; then
     FWD_ARGS+=(--bind="$BIND")
   fi
+  FWD_ARGS+=("$TC_ADDR" "$LP:$PORT")
   echo "==> forwarding local :$LP -> $TC_ADDR:$PORT (background${BIND:+ bind=$BIND})"
   "$TAILCAT_BIN" "${FWD_ARGS[@]}" &
   FWD_PID=$!
