@@ -13,9 +13,10 @@
 # The downloaded binary is cached at build/tailcat (gitignored) for reuse.
 #
 # Usage:
-#   TC_ADDR=tcp... [PORT=8080] ./scripts/test-client.sh
+#   TC_ADDR=tcp... [PORT=8080] [BIND=127.0.0.1] ./scripts/test-client.sh
 #   ./scripts/test-client.sh tcp...          # ping only
 #   ./scripts/test-client.sh tcp... 8080     # ping + TCP forward probe
+#   BIND=0.0.0.0 ./scripts/test-client.sh tcp... 8080   # forward on all interfaces
 #
 # The server's address is printed by `aria-tailcat run` as:
 #   aria-tailcat: serving tailcat address: tcp...
@@ -34,6 +35,7 @@ cd "$ROOT_DIR"
 
 TC_ADDR="${1:-${TC_ADDR:-}}"
 PORT="${2:-${PORT:-8080}}"
+BIND="${BIND:-}"
 TAILCAT_VERSION="${TAILCAT_VERSION:-0.7.0}"
 
 if [[ -z "$TC_ADDR" ]]; then
@@ -116,13 +118,22 @@ fi
 # Optional: forward a local port to the server's port and probe it.
 if [[ -n "${PORT:-}" ]]; then
   LP=18080
-  echo "==> forwarding local :$LP -> $TC_ADDR:$PORT (background)"
-  "$TAILCAT_BIN" forward "$TC_ADDR" "$LP:$PORT" &
+  FWD_ARGS=(forward "$TC_ADDR" "$LP:$PORT")
+  if [[ -n "$BIND" ]]; then
+    FWD_ARGS+=(--bind="$BIND")
+  fi
+  echo "==> forwarding local :$LP -> $TC_ADDR:$PORT (background${BIND:+ bind=$BIND})"
+  "$TAILCAT_BIN" "${FWD_ARGS[@]}" &
   FWD_PID=$!
   sleep 2
+  # Probe target: if bound to a specific non-wildcard address, hit that; else loopback.
+  PROBE_HOST=127.0.0.1
+  if [[ -n "$BIND" && "$BIND" != "0.0.0.0" ]]; then
+    PROBE_HOST="$BIND"
+  fi
   if command -v nc >/dev/null 2>&1; then
-    if printf 'ping' | nc -w 3 127.0.0.1 "$LP" >/dev/null 2>&1; then
-      echo "PASS: local :$LP reached the server's :$PORT over the tunnel"
+    if printf 'ping' | nc -w 3 "$PROBE_HOST" "$LP" >/dev/null 2>&1; then
+      echo "PASS: $PROBE_HOST:$LP reached the server's :$PORT over the tunnel"
     else
       echo "NOTE: TCP probe inconclusive — nothing may be listening on the server's :$PORT (expected for a bare forward target)"
     fi

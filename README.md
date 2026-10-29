@@ -80,7 +80,14 @@ TC_ADDR=tcp... ./scripts/test-client.sh
 
 # optionally forward a local port to the server's forwarded port and probe it
 TC_ADDR=tcp... PORT=8080 ./scripts/test-client.sh
+
+# expose the forward on all interfaces (default is loopback 127.0.0.1)
+BIND=0.0.0.0 TC_ADDR=tcp... PORT=8080 ./scripts/test-client.sh
 ```
+
+The script passes `BIND` through to `tailcat forward --bind` (default loopback),
+so the forwarded listener is only reachable locally unless you set `BIND` and open
+the port in your firewall.
 
 Other client subcommands (the server must serve the matching mode):
 
