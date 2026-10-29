@@ -2,7 +2,7 @@ Source: aria-tailcat
 Section: net
 Priority: optional
 Maintainer: jia <jia@ariacompute.com>
-Build-Depends: debhelper-compat (= 13), golang-any
+Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Homepage: https://ariacompute.com
