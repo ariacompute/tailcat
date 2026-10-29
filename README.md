@@ -78,16 +78,19 @@ downloads the upstream tailcat release binary (and falls back to a local
 # ping the node over DERP (verifies reachability + allowlist)
 TC_ADDR=tcp... ./scripts/test-client.sh
 
-# optionally forward a local port to the server's forwarded port and probe it
+# forward a local port to the server's forwarded port and keep it up for browsing
+# (defaults: PORT=8080, BIND=0.0.0.0, KEEP=1 -> blocks until Ctrl-C)
 TC_ADDR=tcp... PORT=8080 ./scripts/test-client.sh
 
-# expose the forward on all interfaces (default is loopback 127.0.0.1)
-BIND=0.0.0.0 TC_ADDR=tcp... PORT=8080 ./scripts/test-client.sh
+# one-shot smoke test: probe then tear the forward down (for CI)
+KEEP=0 ./scripts/test-client.sh tcp... 8080
 ```
 
-The script passes `BIND` through to `tailcat forward --bind` (default loopback),
-so the forwarded listener is only reachable locally unless you set `BIND` and open
-the port in your firewall.
+The script passes `BIND` through to `tailcat forward --bind` (default `0.0.0.0`,
+all interfaces) and keeps the forwarded listener up by default (`KEEP=1`) so you
+can browse it; set `KEEP=0` to tear it down after the probe. With `BIND=0.0.0.0`
+(and the port opened in your firewall) the service is reachable externally via
+`http://<host-ip>:18080/`.
 
 Other client subcommands (the server must serve the matching mode):
 

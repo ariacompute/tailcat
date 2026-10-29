@@ -13,10 +13,14 @@
 # The downloaded binary is cached at build/tailcat (gitignored) for reuse.
 #
 # Usage:
-#   TC_ADDR=tcp... [PORT=8080] [BIND=127.0.0.1] ./scripts/test-client.sh
-#   ./scripts/test-client.sh tcp...          # ping only
-#   ./scripts/test-client.sh tcp... 8080     # ping + TCP forward probe
-#   BIND=0.0.0.0 ./scripts/test-client.sh tcp... 8080   # forward on all interfaces
+#   TC_ADDR=tcp... [PORT=8080] [BIND=0.0.0.0] [KEEP=1] ./scripts/test-client.sh
+#   ./scripts/test-client.sh tcp...                 # ping only (omit PORT)
+#   PORT= KEEP=0 ./scripts/test-client.sh tcp...    # one-shot ping + probe, then stop
+#   ./scripts/test-client.sh tcp... 8080           # ping + keep a forward alive on :18080
+#
+# Defaults: PORT=8080, BIND=0.0.0.0 (listen on all interfaces), KEEP=1 (keep the
+# forward running for browsing; Ctrl-C to stop). Set KEEP=0 for a one-shot smoke
+# test that tears down the forward after probing.
 #
 # The server's address is printed by `aria-tailcat run` as:
 #   aria-tailcat: serving tailcat address: tcp...
@@ -28,6 +32,8 @@
 #   server uses a custom DERP map.
 # - In the default `forward` config the server forwards to localhost:$PORT on the
 #   server; the TCP probe just checks that a tunnel can be established end-to-end.
+# - With KEEP=1 (default) the script blocks until Ctrl-C, leaving the forwarded
+#   port up so you can browse it. Set KEEP=0 (or run under `timeout`) for CI.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,8 +41,10 @@ cd "$ROOT_DIR"
 
 TC_ADDR="${1:-${TC_ADDR:-}}"
 PORT="${2:-${PORT:-8080}}"
-BIND="${BIND:-}"
+BIND="${BIND:-0.0.0.0}"
+KEEP="${KEEP:-1}"
 TAILCAT_VERSION="${TAILCAT_VERSION:-0.7.0}"
+FWD_PID=""
 
 if [[ -z "$TC_ADDR" ]]; then
   echo "error: no tailcat address. Set TC_ADDR (or pass it as the first arg)." >&2
@@ -59,7 +67,11 @@ download() {
 
 # --- Obtain the upstream tailcat CLI -----------------------------------------
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+cleanup() {
+  [[ -n "$FWD_PID" ]] && kill "$FWD_PID" 2>/dev/null || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT INT TERM
 
 TAILCAT_BIN="$ROOT_DIR/build/tailcat"
 if [[ -x "$TAILCAT_BIN" ]]; then
@@ -141,7 +153,13 @@ if [[ -n "${PORT:-}" ]]; then
   else
     echo "NOTE: nc not installed; skipping TCP probe"
   fi
-  kill "$FWD_PID" 2>/dev/null || true
+  if [[ "$KEEP" == "1" ]]; then
+    echo "==> tunnel kept alive (KEEP=1). Press Ctrl-C to stop."
+    echo "==> browse: http://127.0.0.1:$LP/ (or <this-host-ip>:$LP if the firewall allows)"
+    wait "$FWD_PID" || true
+  else
+    kill "$FWD_PID" 2>/dev/null || true
+  fi
 fi
 
 echo "==> client connectivity OK"
