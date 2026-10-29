@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+# Create the state directory (also created by systemd StateDirectory, but be
+# safe for non-systemd installs). tailcat stores saved keys under
+# $HOME/.config/tailcat/keys.
+STATEDIR=/var/lib/aria-tailcat
+if [ ! -d "$STATEDIR" ]; then
+  mkdir -p "$STATEDIR"
+  chown root:root "$STATEDIR"
+  chmod 0755 "$STATEDIR"
+fi
+
+KEYDIR="$STATEDIR/.config/tailcat/keys"
+if [ ! -d "$KEYDIR" ]; then
+  mkdir -p "$KEYDIR"
+  chmod 0700 "$KEYDIR"
+fi
+
+#DEBHELPER#

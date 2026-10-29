@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "purge" ]; then
+  STATEDIR=/var/lib/aria-tailcat
+  rm -rf "$STATEDIR/.config"
+  if [ -d "$STATEDIR" ]; then
+    rmdir --ignore-fail-on-non-empty "$STATEDIR" 2>/dev/null || true
+  fi
+  # Remove the config dir only if it is empty (config.yaml may remain as a conffile).
+  if [ -d /etc/aria-tailcat ]; then
+    rmdir --ignore-fail-on-non-empty /etc/aria-tailcat 2>/dev/null || true
+  fi
+fi
+
+#DEBHELPER#

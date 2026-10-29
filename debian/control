@@ -1,0 +1,17 @@
+Source: aria-tailcat
+Section: net
+Priority: optional
+Maintainer: jia <jia@ariacompute.com>
+Build-Depends: debhelper-compat (= 13), golang-any
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://ariacompute.com
+
+Package: aria-tailcat
+Architecture: any
+Depends: ${misc:Depends}, ca-certificates
+Description: Deployment launcher for tailscale/tailcat on ariacompute
+ Wraps github.com/tailscale/tailcat (a control-plane-free, WireGuard+DERP
+ point-to-point tunnel) as a long-running ariacompute service. Resolves
+ configuration from YAML/flags/env, builds the `tailcat serve` argument
+ vector, and runs the bundled tailcat binary under systemd.

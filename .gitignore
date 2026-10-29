@@ -1,0 +1,21 @@
+# Build artifacts
+/build/
+/dist/
+aria-tailcat
+tailcat
+
+# Debian build output
+*.deb
+*.buildinfo
+*.changes
+deb-build/
+
+# Test artifacts
+*.out
+coverage.txt
+debian/*.debhelper
+debian/*.default
+debian/*.substvars
+debian/debhelper-build-stamp
+debian/files
+debian/aria-tailcat/

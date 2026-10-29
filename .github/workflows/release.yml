@@ -1,0 +1,123 @@
+name: Release aria-tailcat
+
+on:
+  push:
+    tags:
+      - 'aria-tailcat/v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.vars.outputs.release_version }}
+      release_tag: ${{ steps.vars.outputs.release_tag }}
+    steps:
+      - id: vars
+        name: Derive release tag/version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="aria-tailcat/v$(date +%Y.%m.%d)"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#aria-tailcat/}"
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build-binaries:
+    needs: metadata
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-latest
+          - goos: windows
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: darwin
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: darwin
+            goarch: arm64
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          check-latest: true
+      - name: Build aria-tailcat launcher
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          BIN_EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then BIN_EXT=".exe"; fi
+          go build -trimpath -buildvcs=false -ldflags "-s -w" \
+            -o "dist/aria-tailcat-${GOOS}-${GOARCH}${BIN_EXT}" ./cmd/aria-tailcat
+          go build -trimpath -buildvcs=false -ldflags "-s -w" \
+            -o "dist/tailcat-${GOOS}-${GOARCH}${BIN_EXT}" github.com/tailscale/tailcat/cmd/tailcat
+      - name: Package
+        run: |
+          cd dist
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.zip" \
+              "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.exe" \
+              "tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.exe"
+          else
+            tar -czf "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+              "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}" \
+              "tailcat-${{ matrix.goos }}-${{ matrix.goarch }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.*
+
+  build-deb:
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          check-latest: true
+      - name: Stamp changelog version
+        run: |
+          sed -E -i "1s/^aria-tailcat \([^)]+\)/aria-tailcat (${{ needs.metadata.outputs.release_version }})/" debian/changelog
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debhelper-compat golang-any build-essential
+      - name: Build .deb
+        run: ./scripts/build-deb.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: ../aria-tailcat_*.deb
+
+  release:
+    needs: [metadata, build-binaries, build-deb]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artifacts
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.metadata.outputs.release_tag }}
+          name: aria-tailcat ${{ needs.metadata.outputs.release_version }}
+          files: artifacts/*

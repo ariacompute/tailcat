@@ -1,0 +1,52 @@
+# aria-tailcat deployment config for github.com/tailscale/tailcat.
+# The Debian package installs this to /etc/aria-tailcat/config.yaml and loads it
+# automatically. Override with ARIA_TAILCAT_CONFIG in /etc/default/aria-tailcat.
+
+# Path to the tailcat binary. Empty = packaged path (/usr/lib/aria-tailcat/tailcat),
+# then PATH. Usually left empty; set ARIA_TAILCAT_BIN to override for local runs.
+# bin: /usr/lib/aria-tailcat/tailcat
+
+serve:
+  # Mode selects the serve shape (maps onto `tailcat serve`):
+  #   listen  - A) generic listener: print the tc... address, serve the given ports
+  #   forward - B) expose an internal ariacompute port through the tunnel
+  #   ssh     - C) SSH server (requires ssh.authorized_keys)
+  #   exec    - C) run a command per connection
+  # You may also use a raw tailcat service name: all / exit-node / files.
+  #
+  # --- A) Generic listener (print address) ---
+  # mode: listen
+  # ports:
+  #   - "8080"
+  #   - "9090"
+  #
+  # --- B) Forward an internal port to the tunnel ---
+  # mode: forward
+  # forward: "8080"          # the internal ariacompute service port
+  #
+  # --- C) SSH server ---
+  # mode: ssh
+  # ssh:
+  #   authorized_keys:
+  #     - alice@github
+  #     - /etc/aria-tailcat/id_ed25519.pub
+  #
+  # --- C) Exec server ---
+  # mode: exec
+  # exec:
+  #   command: /usr/bin/fortune
+
+  # Common options (all optional):
+  # key: default              # tailcat key name/path; 'new' for ephemeral; "" = saved default
+  # derpmap_url: ""           # custom DERP map URL (else TAILCAT_DERPMAP_URL / tailcat default)
+  # allow:                    # nodekey allowlist; empty = allow all
+  #   - nodekey:...
+  # psk: true                 # include WireGuard PSK in address (tailcat default true)
+  # full_address: false
+  # verbose: false
+  # json: false
+
+  # Default: an example listen mode. Edit for your deployment.
+  mode: listen
+  ports:
+    - "8080"

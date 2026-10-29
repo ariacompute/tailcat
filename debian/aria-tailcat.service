@@ -1,0 +1,22 @@
+[Unit]
+Description=tailscale/tailcat deployment service for ariacompute
+Documentation=https://ariacompute.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=HOME=/var/lib/aria-tailcat
+EnvironmentFile=-/etc/default/aria-tailcat
+WorkingDirectory=/var/lib/aria-tailcat
+StateDirectory=aria-tailcat
+ExecStart=/usr/lib/aria-tailcat/aria-tailcat-service
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/aria-tailcat
+
+[Install]
+WantedBy=multi-user.target

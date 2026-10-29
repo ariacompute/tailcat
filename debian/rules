@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export CGO_ENABLED = 0
+
+%:
+	dh $@
+
+# Build the aria-tailcat launcher and the tailcat binary from the pinned
+# github.com/tailscale/tailcat module (see go.mod / tools.go).
+override_dh_auto_build:
+	mkdir -p build
+	go build -trimpath -buildvcs=false -ldflags "-s -w" -o build/aria-tailcat ./cmd/aria-tailcat
+	go build -trimpath -buildvcs=false -ldflags "-s -w" -o build/tailcat github.com/tailscale/tailcat/cmd/tailcat
+
+override_dh_auto_test:
+	go test ./...
+
+override_dh_auto_clean:
+	rm -rf build
+
+# Keep the /etc/default env template root-only (may carry secrets later).
+override_dh_fixperms:
+	dh_fixperms
+	chmod 600 debian/aria-tailcat/etc/default/aria-tailcat
+
+# Binaries are already stripped (-ldflags "-s -w"), so there is no debug info
+# for dh_dwz to process; newer debhelper errors out otherwise.
+override_dh_dwz:
+	:
