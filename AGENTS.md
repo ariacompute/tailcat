@@ -8,7 +8,8 @@ that runs **without** the Tailscale control plane, `tsnet`, or Funnel.
 Unlike `aria-tailscale` (a transparent Host-based Funnel reverse proxy),
 `aria-tailcat` is a **thin launcher**: it resolves configuration from
 YAML/flags/env, builds the `tailcat serve` argument vector, and runs the
-bundled `tailcat` binary as a long-running systemd service.
+`tailcat` binary (compiled from the pinned `github.com/tailscale/tailcat` module)
+as a long-running systemd service.
 
 ## Repository layout
 
@@ -33,11 +34,11 @@ scripts/
 ## Architecture
 
 - **Module dependency, not a prebuilt binary**: `github.com/tailscale/tailcat` is a
-  pinned Go module dependency (see `go.mod` + `tools.go`). The Debian build compiles
-  `github.com/tailscale/tailcat/cmd/tailcat` from that module and bundles it at
-  `/usr/lib/aria-tailcat/tailcat`. At runtime `aria-tailcat` `exec`s it. This avoids
-  fetching an opaque binary while still using tailcat's full, correct `serve`
-  behavior (including ssh/exec).
+  pinned Go module dependency (see `go.mod` + `tools.go`). `aria-tailcat` imports the
+  `tailcat` package and runs the server **in-process** (constructs a `tailcat.Server`,
+  calls `Start()`), so no separate `tailcat` binary is built, bundled, or `exec`'d.
+  This avoids fetching an opaque binary while still using tailcat's full, correct
+  `serve` behavior (including ssh/exec) directly from the library.
 - **Routing / serve shapes** (`Config.Serve.Mode`):
   - `listen` (A) — generic listener: `tailcat serve <ports>` prints the `tc...` address.
   - `forward` (B) — expose an internal ariacompute port: `tailcat serve <port>`.

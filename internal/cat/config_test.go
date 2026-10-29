@@ -8,18 +8,6 @@ import (
 
 func boolPtr(b bool) *bool { return &b }
 
-func equalArgs(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func TestDefaultConfig(t *testing.T) {
 	c := defaultConfig()
 	if c.Serve.Mode != "listen" {
@@ -29,7 +17,6 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestLoadConfig(t *testing.T) {
 	yaml := `
-bin: /opt/tailcat
 serve:
   mode: forward
   forward: "8080"
@@ -46,9 +33,6 @@ serve:
 	c, err := LoadConfig(p)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if c.Bin != "/opt/tailcat" {
-		t.Errorf("bin = %q", c.Bin)
 	}
 	if c.Serve.Mode != "forward" {
 		t.Errorf("mode = %q", c.Serve.Mode)
@@ -70,7 +54,6 @@ serve:
 func TestApplyConfig(t *testing.T) {
 	dst := defaultConfig()
 	src := &Config{
-		Bin: "/x/tailcat",
 		Serve: ServeConfig{
 			Mode: "ssh",
 			SSH: struct {
@@ -80,9 +63,6 @@ func TestApplyConfig(t *testing.T) {
 		},
 	}
 	applyConfig(&dst, src)
-	if dst.Bin != "/x/tailcat" {
-		t.Errorf("bin = %q", dst.Bin)
-	}
 	if dst.Serve.Mode != "ssh" {
 		t.Errorf("mode = %q", dst.Serve.Mode)
 	}
@@ -94,73 +74,67 @@ func TestApplyConfig(t *testing.T) {
 	}
 }
 
-func TestBuildServeArgs(t *testing.T) {
-	t.Run("listen", func(t *testing.T) {
-		args, err := BuildServeArgs(ServeConfig{Mode: "listen", Ports: []string{"8080", "9090"}})
+func TestBuildServer(t *testing.T) {
+	t.Run("listen ports", func(t *testing.T) {
+		s, err := BuildServer(ServeConfig{Mode: "listen", Key: "new", Ports: []string{"8080", "9090"}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"serve", "8080,9090"}
-		if !equalArgs(args, want) {
-			t.Errorf("got %v want %v", args, want)
+		if len(s.ServedTCPPorts) != 2 {
+			t.Errorf("ServedTCPPorts = %v", s.ServedTCPPorts)
+		}
+		if s.OnTCP == nil {
+			t.Error("OnTCP handler not set")
+		}
+		if s.OnTCP(8080) == nil {
+			t.Error("OnTCP(8080) should return a forward handler")
 		}
 	})
 	t.Run("forward", func(t *testing.T) {
-		args, err := BuildServeArgs(ServeConfig{Mode: "forward", Forward: "8080"})
+		s, err := BuildServer(ServeConfig{Mode: "forward", Key: "new", Forward: "8080"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"serve", "8080"}
-		if !equalArgs(args, want) {
-			t.Errorf("got %v want %v", args, want)
+		if len(s.ServedTCPPorts) != 1 || s.ServedTCPPorts[0].First != 8080 {
+			t.Errorf("ServedTCPPorts = %v", s.ServedTCPPorts)
 		}
 	})
 	t.Run("ssh", func(t *testing.T) {
-		c := ServeConfig{Mode: "ssh"}
-		c.SSH.AuthorizedKeys = []string{"alice@github"}
-		args, err := BuildServeArgs(c)
+		s, err := BuildServer(ServeConfig{Mode: "ssh", Key: "new"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"serve", "--ssh-authorized-keys=alice@github", "ssh"}
-		if !equalArgs(args, want) {
-			t.Errorf("got %v want %v", args, want)
+		if s.OnTCP == nil || s.OnTCP(22) == nil {
+			t.Error("ssh mode must handle port 22")
 		}
 	})
 	t.Run("exec", func(t *testing.T) {
-		c := ServeConfig{Mode: "exec"}
-		c.Exec.Command = "/bin/sh -c echo hi"
-		args, err := BuildServeArgs(c)
+		s, err := BuildServer(ServeConfig{Mode: "exec", Key: "new", Exec: struct {
+			Command string `yaml:"command"`
+		}{Command: "/bin/sh -c echo hi"}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"serve", "exec", "--", "/bin/sh", "-c", "echo", "hi"}
-		if !equalArgs(args, want) {
-			t.Errorf("got %v want %v", args, want)
+		if s.OnTCP == nil || s.OnTCP(1234) == nil {
+			t.Error("exec mode must handle connections on any port")
 		}
 	})
-	t.Run("with flags", func(t *testing.T) {
-		args, err := BuildServeArgs(ServeConfig{
-			Mode: "listen", Ports: []string{"80"}, Key: "default",
-			DerpMapURL: "https://x/derp.json", Allow: []string{"nodekey:a"},
-			PSK: boolPtr(false), FullAddress: true, Verbose: true, JSON: true,
-		})
+	t.Run("psk disabled", func(t *testing.T) {
+		s, err := BuildServer(ServeConfig{Mode: "listen", Key: "new", Ports: []string{"80"}, PSK: boolPtr(false)})
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"serve", "--key=default", "--derpmap-url=https://x/derp.json",
-			"--allow=nodekey:a", "--psk=false", "--full-address", "--verbose", "--json", "80"}
-		if !equalArgs(args, want) {
-			t.Errorf("got %v want %v", args, want)
+		if !s.DisablePresharedKey {
+			t.Error("DisablePresharedKey should be true when psk=false")
 		}
 	})
 	t.Run("listen needs ports", func(t *testing.T) {
-		if _, err := BuildServeArgs(ServeConfig{Mode: "listen"}); err == nil {
+		if _, err := BuildServer(ServeConfig{Mode: "listen", Key: "new"}); err == nil {
 			t.Error("expected error for listen without ports")
 		}
 	})
 	t.Run("exec needs command", func(t *testing.T) {
-		if _, err := BuildServeArgs(ServeConfig{Mode: "exec"}); err == nil {
+		if _, err := BuildServer(ServeConfig{Mode: "exec", Key: "new"}); err == nil {
 			t.Error("expected error for exec without command")
 		}
 	})

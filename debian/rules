@@ -6,12 +6,12 @@ export CGO_ENABLED = 0
 %:
 	dh $@
 
-# Build the aria-tailcat launcher and the tailcat binary from the pinned
-# github.com/tailscale/tailcat module (see go.mod / tools.go).
+# Build the aria-tailcat launcher. tailcat is used in-process via the pinned
+# github.com/tailscale/tailcat module (see go.mod / tools.go); no separate
+# tailcat binary is built or bundled into the package.
 override_dh_auto_build:
 	mkdir -p build
 	go build -trimpath -buildvcs=false -ldflags "-s -w" -o build/aria-tailcat ./cmd/aria-tailcat
-	go build -trimpath -buildvcs=false -ldflags "-s -w" -o build/tailcat github.com/tailscale/tailcat/cmd/tailcat
 
 override_dh_auto_test:
 	go test ./...

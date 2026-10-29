@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# test-cat.sh - local smoke test for aria-tailcat + tailcat.
-# Builds aria-tailcat and the bundled tailcat binary, runs `aria-tailcat run`
-# in listen mode, and verifies a tailcat address (tc...) is printed.
+# test-cat.sh - local smoke test for aria-tailcat.
+# Builds aria-tailcat and runs it in-process (the tailcat server runs inside the
+# aria-tailcat process via the imported github.com/tailscale/tailcat module), in
+# listen mode, and verifies a tailcat address (tc...) is printed.
 #
 # Requires outbound access to a DERP map (https://tailcat.dev/derpmap.json) so
 # tailcat can obtain its address.
@@ -12,8 +13,6 @@ cd "$ROOT_DIR"
 
 echo "==> building aria-tailcat"
 go build -o build/aria-tailcat ./cmd/aria-tailcat
-echo "==> building tailcat"
-go build -o build/tailcat github.com/tailscale/tailcat/cmd/tailcat
 
 cat > build/test-cat.yaml <<'EOF'
 serve:
@@ -23,7 +22,7 @@ serve:
 EOF
 
 echo "==> running aria-tailcat (listen :8080) — expecting a tc... address"
-if timeout 60 ./build/aria-tailcat run --bin ./build/tailcat --config build/test-cat.yaml 2>&1 | grep -qiE 'tc[0-9a-z]+'; then
+if timeout 60 ./build/aria-tailcat run --config build/test-cat.yaml 2>&1 | grep -qiE 'tc[0-9a-z]+'; then
   echo "PASS: tailcat address printed"
 else
   echo "WARN: no tailcat address observed (likely no DERP/network access)"

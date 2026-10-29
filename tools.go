@@ -1,9 +1,10 @@
 //go:build tools
 // +build tools
 
-// Package tools pins modules used by aria-tailcat's build pipeline so that
-// `go build github.com/tailscale/tailcat/cmd/tailcat` (used by debian/rules and
-// scripts to bundle the tailcat binary) resolves from this module's graph.
+// Package tools pins modules used by aria-tailcat so that `go mod tidy` does not
+// prune the tailcat library (github.com/tailscale/tailcat) and the dependencies only
+// its CLI (not the library) requires. `aria-tailcat` imports the `tailcat` package and
+// runs the server in-process; no separate tailcat binary is built or bundled.
 //
 // This file is never compiled into the aria-tailcat binary (build tag "tools").
 // The explicit imports below keep `go mod tidy` from pruning dependencies that

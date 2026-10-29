@@ -8,18 +8,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ServeConfig describes how the bundled tailcat binary should serve.
+// ServeConfig describes how the imported github.com/tailscale/tailcat library
+// should serve, in-process (no separate tailcat binary is executed).
 //
 // The three ariacompute serve shapes map onto tailcat like this:
-//   - A) listen (generic listener): Mode=listen  + Ports=[...]        -> `tailcat serve <ports>`
-//   - B) forward (expose internal port): Mode=forward + Forward=<port> -> `tailcat serve <port>`
-//   - C) ssh / exec server: Mode=ssh | exec                            -> `tailcat serve [--ssh-authorized-keys=...] ssh` / `tailcat serve exec -- <cmd>`
+//   - A) listen (generic listener): Mode=listen  + Ports=[...]         -> tailcat serve <ports>
+//   - B) forward (expose internal port): Mode=forward + Forward=<port> -> tailcat serve <port>
+//   - C) ssh / exec server: Mode=ssh | exec                             -> tailcat serve [--ssh-authorized-keys=...] ssh / tailcat serve exec -- <cmd>
 type ServeConfig struct {
 	Mode    string   `yaml:"mode"`    // "listen" | "forward" | "ssh" | "exec" (or a raw tailcat service name like "all"/"exit-node"/"files")
 	Ports   []string `yaml:"ports"`   // A: list of ports / ranges to serve
 	Forward string   `yaml:"forward"` // B: internal port to expose via the tunnel
 	SSH     struct {
-		AuthorizedKeys []string `yaml:"authorized_keys"` // C: SSH authorized-key sources (file / literal / name@github)
+		AuthorizedKeys []string `yaml:"authorized_keys"` // C: SSH authorized-key sources (file / literal)
 	} `yaml:"ssh"`
 	Exec struct {
 		Command string `yaml:"command"` // C: command run per connection, space-separated
@@ -35,14 +36,12 @@ type ServeConfig struct {
 
 // Config is the parsed aria-tailcat configuration.
 type Config struct {
-	Bin   string      `yaml:"bin"` // path to the tailcat binary; empty = resolve via default/packaged path then PATH
 	Serve ServeConfig `yaml:"serve"`
 }
 
 // defaultConfig returns the built-in defaults used before any YAML or CLI input.
 func defaultConfig() Config {
 	return Config{
-		Bin: "",
 		Serve: ServeConfig{
 			Mode: "listen",
 		},
@@ -59,7 +58,6 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, err
 	}
-	c.Bin = strings.TrimSpace(c.Bin)
 	return &c, nil
 }
 
@@ -67,9 +65,6 @@ func LoadConfig(path string) (*Config, error) {
 // dst. A non-nil PSK pointer always wins. Boolean flags OR together so an explicit
 // true in either source is preserved.
 func applyConfig(dst *Config, src *Config) {
-	if src.Bin != "" {
-		dst.Bin = src.Bin
-	}
 	applyServe(&dst.Serve, &src.Serve)
 }
 

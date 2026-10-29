@@ -19,7 +19,7 @@ func main() {
 	root := &cobra.Command{
 		Use:           "aria-tailcat",
 		Short:         "Deployment launcher for github.com/tailscale/tailcat on ariacompute hosts",
-		Long:          "aria-tailcat is the ariacompute deployment wrapper for tailscale/tailcat (a control-plane-free, WireGuard+DERP point-to-point tunnel). It resolves configuration from YAML/flags/env, builds the `tailcat serve` argument vector, and launches the bundled tailcat binary as a long-running service.",
+		Long:          "aria-tailcat is the ariacompute deployment wrapper for tailscale/tailcat (a control-plane-free, WireGuard+DERP point-to-point tunnel). It resolves configuration from YAML/flags/env and runs the tailcat server in-process via the imported github.com/tailscale/tailcat module (no separate tailcat binary is executed).",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

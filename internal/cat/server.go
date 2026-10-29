@@ -12,14 +12,12 @@ import (
 // Options is the fully-resolved runtime configuration.
 type Options struct {
 	ConfigFile string
-	Bin        string
 	Serve      ServeConfig
 }
 
 // RegisterFlags registers all CLI flags on the given command.
 func RegisterFlags(cmd *cobra.Command) {
 	cmd.Flags().String("config", "", "Path to YAML config file")
-	cmd.Flags().String("bin", "", "Path to the tailcat binary (default packaged path, then PATH)")
 	cmd.Flags().String("serve-mode", "", "Serve mode: listen | forward | ssh | exec (or a raw tailcat service name)")
 	cmd.Flags().StringArray("serve-ports", nil, "Ports/ranges to serve (listen/forward mode)")
 	cmd.Flags().String("serve-forward", "", "Internal port to expose via the tunnel (forward mode)")
@@ -78,8 +76,6 @@ func FlagsFromCmd(cmd *cobra.Command) (Options, error) {
 		return err == nil && v
 	}
 
-	o.Bin = setStr("bin", cfg.Bin)
-
 	sv := cfg.Serve
 	sv.Mode = setStr("serve-mode", sv.Mode)
 	if cmd.Flags().Changed("serve-ports") {
@@ -117,13 +113,10 @@ func FlagsFromCmd(cmd *cobra.Command) (Options, error) {
 	return o, nil
 }
 
-// Run builds the tailcat serve argument vector and launches it until ctx is
-// cancelled.
+// Run builds the in-process tailcat server from o.Serve and serves until ctx is
+// cancelled. (The implementation lives in serve.go to keep the module-import
+// integration separate from flag parsing.)
 func Run(ctx context.Context, o Options) error {
-	args, err := BuildServeArgs(o.Serve)
-	if err != nil {
-		return err
-	}
 	log.Printf("aria-tailcat: serve mode=%s", o.Serve.Mode)
-	return Launch(ctx, o.Bin, args)
+	return runServe(ctx, o)
 }

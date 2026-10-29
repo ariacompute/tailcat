@@ -1,14 +1,13 @@
 #!/bin/sh
 # aria-tailcat-service — translates /etc/default/aria-tailcat into flags and
-# execs the aria-tailcat launcher, which in turn runs the bundled tailcat
-# binary. Secrets (key/PSK) are passed via config file or env, never on the
-# command line.
+# execs the aria-tailcat launcher, which runs the tailcat server in-process via
+# the imported github.com/tailscale/tailcat module. Secrets (key/PSK) are passed
+# via config file or env, never on the command line.
 set -eu
 
 : "${ARIA_TAILCAT_HOME:=/var/lib/aria-tailcat}"
 export HOME="${HOME:-$ARIA_TAILCAT_HOME}"
 
-: "${ARIA_TAILCAT_BIN:=/usr/lib/aria-tailcat/tailcat}"
 : "${ARIA_TAILCAT_CONFIG:=/etc/aria-tailcat/config.yaml}"
 
 mkdir -p "$ARIA_TAILCAT_HOME"
@@ -19,7 +18,6 @@ if [ -f /etc/default/aria-tailcat ]; then
 fi
 
 ARGS=""
-ARGS="$ARGS --bin $ARIA_TAILCAT_BIN"
 
 if [ -n "${ARIA_TAILCAT_CONFIG:-}" ] && [ -f "$ARIA_TAILCAT_CONFIG" ]; then
   ARGS="$ARGS --config $ARIA_TAILCAT_CONFIG"

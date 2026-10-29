@@ -1,123 +1,226 @@
-name: Release aria-tailcat
+name: Release
 
 on:
-  push:
-    tags:
-      - 'aria-tailcat/v*'
-  workflow_dispatch:
+  release:
+    types:
+      - created
 
 permissions:
   contents: write
 
 jobs:
   metadata:
+    name: Prepare release metadata
     runs-on: ubuntu-latest
     outputs:
-      release_version: ${{ steps.vars.outputs.release_version }}
-      release_tag: ${{ steps.vars.outputs.release_tag }}
+      release_version: ${{ steps.versions.outputs.release_version }}
+      deb_version: ${{ steps.versions.outputs.deb_version }}
     steps:
-      - id: vars
-        name: Derive release tag/version
+      - name: Derive version strings from release tag
+        id: versions
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="aria-tailcat/v$(date +%Y.%m.%d)"
-          else
-            TAG="${GITHUB_REF_NAME}"
+          release_version="${RELEASE_TAG#aria-tailcat/}"
+          release_version="${release_version#v}"
+
+          if [[ -z "$release_version" ]]; then
+            echo "failed to derive release version from tag: ${RELEASE_TAG}" >&2
+            exit 1
           fi
-          VERSION="${TAG#aria-tailcat/}"
-          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "release_version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          deb_version="$release_version"
+          if [[ "$deb_version" == *-* ]]; then
+            deb_version="${deb_version/-/~}"
+          fi
+
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "deb_version=$deb_version" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
 
   build-binaries:
-    needs: metadata
+    name: Build ${{ matrix.label }}
+    needs:
+      - metadata
+      - test
+    runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - goos: linux
+          - label: linux amd64
+            goos: linux
             goarch: amd64
-            runner: ubuntu-latest
-          - goos: linux
+            binary_name: aria-tailcat
+            archive_suffix: linux_amd64.tar.gz
+            artifact_suffix: linux-amd64
+            archive_type: tar.gz
+          - label: linux arm64
+            goos: linux
             goarch: arm64
-            runner: ubuntu-latest
-          - goos: windows
+            binary_name: aria-tailcat
+            archive_suffix: linux_arm64.tar.gz
+            artifact_suffix: linux-arm64
+            archive_type: tar.gz
+          - label: windows x64
+            goos: windows
             goarch: amd64
-            runner: ubuntu-latest
-          - goos: darwin
-            goarch: amd64
-            runner: ubuntu-latest
-          - goos: darwin
-            goarch: arm64
-            runner: ubuntu-latest
-    runs-on: ${{ matrix.runner }}
+            binary_name: aria-tailcat.exe
+            archive_suffix: windows_x64.zip
+            artifact_suffix: windows-x64
+            archive_type: zip
+    env:
+      RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.27.3'
-          check-latest: true
-      - name: Build aria-tailcat launcher
+          go-version-file: go.mod
+
+      - name: Build binaries
+        shell: bash
         env:
-          CGO_ENABLED: '0'
+          CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          BIN_EXT=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then BIN_EXT=".exe"; fi
-          go build -trimpath -buildvcs=false -ldflags "-s -w" \
-            -o "dist/aria-tailcat-${GOOS}-${GOARCH}${BIN_EXT}" ./cmd/aria-tailcat
-          go build -trimpath -buildvcs=false -ldflags "-s -w" \
-            -o "dist/tailcat-${GOOS}-${GOARCH}${BIN_EXT}" github.com/tailscale/tailcat/cmd/tailcat
-      - name: Package
+          mkdir -p dist
+          go build -trimpath -buildvcs=false -ldflags "-s -w" -o "dist/${{ matrix.binary_name }}" ./cmd/aria-tailcat
+
+      - name: Package tarball
+        if: matrix.archive_type == 'tar.gz'
+        shell: bash
+        run: tar -C dist -czf "dist/aria-tailcat_${RELEASE_VERSION}_${{ matrix.archive_suffix }}" "${{ matrix.binary_name }}"
+
+      - name: Package zip
+        if: matrix.archive_type == 'zip'
+        shell: bash
         run: |
           cd dist
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.zip" \
-              "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.exe" \
-              "tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.exe"
-          else
-            tar -czf "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
-              "aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}" \
-              "tailcat-${{ matrix.goos }}-${{ matrix.goarch }}"
-          fi
-      - uses: actions/upload-artifact@v4
+          zip "aria-tailcat_${RELEASE_VERSION}_${{ matrix.archive_suffix }}" "${{ matrix.binary_name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/aria-tailcat-${{ matrix.goos }}-${{ matrix.goarch }}.*
+          name: aria-tailcat-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_suffix }}
+          path: dist/aria-tailcat_${{ env.RELEASE_VERSION }}_${{ matrix.archive_suffix }}
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS universal
+    needs:
+      - metadata
+      - test
+    runs-on: macos-latest
+    env:
+      RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build universal binaries
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist/macos
+          GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "-s -w" -o dist/macos/aria-tailcat-amd64 ./cmd/aria-tailcat
+          GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "-s -w" -o dist/macos/aria-tailcat-arm64 ./cmd/aria-tailcat
+          lipo -create -output dist/aria-tailcat dist/macos/aria-tailcat-amd64 dist/macos/aria-tailcat-arm64
+          tar -C dist -czf "dist/aria-tailcat_${RELEASE_VERSION}_macos_universal.tar.gz" aria-tailcat
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aria-tailcat-${{ env.RELEASE_VERSION }}-macos-universal
+          path: dist/aria-tailcat_${{ env.RELEASE_VERSION }}_macos_universal.tar.gz
+          if-no-files-found: error
 
   build-deb:
-    needs: metadata
+    name: Build Debian package
+    needs:
+      - metadata
+      - test
     runs-on: ubuntu-latest
+    env:
+      DEB_VERSION: ${{ needs.metadata.outputs.deb_version }}
+      RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.27.3'
-          check-latest: true
-      - name: Stamp changelog version
-        run: |
-          sed -E -i "1s/^aria-tailcat \([^)]+\)/aria-tailcat (${{ needs.metadata.outputs.release_version }})/" debian/changelog
-      - name: Install build deps
+          go-version-file: go.mod
+
+      - name: Install packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y debhelper-compat golang-any build-essential
-      - name: Build .deb
-        run: ./scripts/build-deb.sh
-      - uses: actions/upload-artifact@v4
+          sudo apt-get install -y build-essential debhelper
+
+      - name: Set Debian package version from release tag
+        shell: bash
+        run: |
+          sed -E -i "1s/^aria-tailcat \([^)]+\)/aria-tailcat (${DEB_VERSION})/" debian/changelog
+
+      - name: Build Debian package
+        shell: bash
+        run: bash ./scripts/build-deb.sh
+
+      - name: Collect package artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp ../aria-tailcat_*.deb dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: deb
-          path: ../aria-tailcat_*.deb
+          name: aria-tailcat-${{ env.RELEASE_VERSION }}-debian-package
+          path: dist/*.deb
+          if-no-files-found: error
 
   release:
-    needs: [metadata, build-binaries, build-deb]
+    name: Publish release
+    needs:
+      - build-binaries
+      - build-macos
+      - build-deb
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
+          path: release-assets
           merge-multiple: true
-          path: artifacts
-      - name: Create GitHub release
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.metadata.outputs.release_tag }}
-          name: aria-tailcat ${{ needs.metadata.outputs.release_version }}
-          files: artifacts/*
+          files: release-assets/*
+          token: ${{ secrets.ARIACOMPUTE_TOKEN }}

@@ -13,5 +13,6 @@ Depends: ${misc:Depends}, ca-certificates
 Description: Deployment launcher for tailscale/tailcat on ariacompute
  Wraps github.com/tailscale/tailcat (a control-plane-free, WireGuard+DERP
  point-to-point tunnel) as a long-running ariacompute service. Resolves
- configuration from YAML/flags/env, builds the `tailcat serve` argument
- vector, and runs the bundled tailcat binary under systemd.
+ configuration from YAML/flags/env and runs the tailcat server in-process via
+ the imported github.com/tailscale/tailcat module (no separate tailcat binary is
+ executed or bundled).
