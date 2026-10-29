@@ -3,17 +3,23 @@
 # the upstream tailcat CLI as the peer.
 #
 # aria-tailcat runs the tailcat server IN-PROCESS (github.com/tailscale/tailcat);
-# this script builds that same pinned module's `cmd/tailcat` CLI and uses it as a
-# client to verify DERP reachability and (optionally) end-to-end TCP reachability
-# to the server's forwarded port.
+# this script obtains the upstream tailcat CLI and uses it as a client to verify
+# DERP reachability and (optionally) end-to-end TCP reachability to the server's
+# forwarded port.
+#
+# The upstream CLI is obtained without a local Go toolchain:
+#   - linux:   download the release tarball (tailcat_<ver>_linux_<arch>.tar.gz)
+#   - darwin:  no release asset exists, so fall back to `go build` if `go` is present
+# The downloaded binary is cached at build/tailcat (gitignored) for reuse.
 #
 # Usage:
-#   TC_ADDR=tc... [PORT=8080] ./scripts/test-client.sh
-#   ./scripts/test-client.sh tc...          # ping only
-#   ./scripts/test-client.sh tc... 8080     # ping + TCP forward probe
+#   TC_ADDR=tcp... [PORT=8080] ./scripts/test-client.sh
+#   ./scripts/test-client.sh tcp...          # ping only
+#   ./scripts/test-client.sh tcp... 8080     # ping + TCP forward probe
 #
-# The server's `tc...` address is printed by `aria-tailcat run` as:
-#   aria-tailcat: serving tailcat address: tc...
+# The server's address is printed by `aria-tailcat run` as:
+#   aria-tailcat: serving tailcat address: tcp...
+# (the prefix is "tcp", not "tc")
 #
 # Notes:
 # - The client also needs DERP map access. By default it uses
@@ -28,20 +34,76 @@ cd "$ROOT_DIR"
 
 TC_ADDR="${1:-${TC_ADDR:-}}"
 PORT="${2:-${PORT:-8080}}"
+TAILCAT_VERSION="${TAILCAT_VERSION:-0.7.0}"
 
 if [[ -z "$TC_ADDR" ]]; then
   echo "error: no tailcat address. Set TC_ADDR (or pass it as the first arg)." >&2
   echo "       It is printed by 'aria-tailcat run' as:" >&2
-  echo "         aria-tailcat: serving tailcat address: tc..." >&2
+  echo "         aria-tailcat: serving tailcat address: tcp..." >&2
   exit 2
 fi
 
-# Build the upstream tailcat CLI from the pinned module (no separate download).
+download() {
+  local url="$1" out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$out"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$out" "$url"
+  else
+    echo "error: need curl or wget to download tailcat" >&2
+    exit 1
+  fi
+}
+
+# --- Obtain the upstream tailcat CLI -----------------------------------------
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-TAILCAT_BIN="$WORK/tailcat"
-echo "==> building upstream tailcat CLI (github.com/tailscale/tailcat)"
-go build -trimpath -buildvcs=false -ldflags "-s -w" -o "$TAILCAT_BIN" github.com/tailscale/tailcat/cmd/tailcat
+
+TAILCAT_BIN="$ROOT_DIR/build/tailcat"
+if [[ -x "$TAILCAT_BIN" ]]; then
+  echo "==> reusing cached tailcat CLI ($TAILCAT_BIN)"
+else
+  OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64|amd64)  ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+    armv7l|armv7)  ARCH=armv7 ;;
+    *) echo "error: unsupported architecture: $ARCH" >&2; exit 2 ;;
+  esac
+
+  if [[ "$OS" == "linux" ]]; then
+    ASSET="tailcat_${TAILCAT_VERSION}_${OS}_${ARCH}.tar.gz"
+    URL="https://github.com/tailscale/tailcat/releases/download/v${TAILCAT_VERSION}/${ASSET}"
+    echo "==> downloading upstream tailcat $TAILCAT_VERSION ($ASSET)"
+    if ! download "$URL" "$WORK/tailcat.tar.gz"; then
+      echo "error: failed to download $URL" >&2
+      exit 1
+    fi
+    tar -xzf "$WORK/tailcat.tar.gz" -C "$WORK"
+  elif [[ "$OS" == "darwin" ]]; then
+    echo "==> no macOS release asset for tailcat $TAILCAT_VERSION; building from source"
+    if ! command -v go >/dev/null 2>&1; then
+      echo "error: 'go' not found; install Go or place a linux tailcat binary at build/tailcat" >&2
+      exit 1
+    fi
+    go build -trimpath -buildvcs=false -ldflags "-s -w" -o "$WORK/tailcat" github.com/tailscale/tailcat/cmd/tailcat
+  else
+    echo "error: unsupported OS: $OS" >&2
+    exit 2
+  fi
+
+  TAILCAT_SRC="$(find "$WORK" -type f -name tailcat | head -1)"
+  if [[ -z "$TAILCAT_SRC" ]]; then
+    echo "error: tailcat binary not found in downloaded archive" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$TAILCAT_BIN")"
+  mv "$TAILCAT_SRC" "$TAILCAT_BIN"
+  chmod +x "$TAILCAT_BIN"
+fi
+
+echo "==> using tailcat: $("$TAILCAT_BIN" version 2>&1 | head -1)"
 
 echo "==> ping $TC_ADDR (via DERP)"
 if "$TAILCAT_BIN" ping --timeout=15s "$TC_ADDR"; then

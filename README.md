@@ -67,33 +67,34 @@ go build -o build/aria-tailcat ./cmd/aria-tailcat
 
 ## Connect to a node (client)
 
-A peer connects to an aria-tailcat node purely through DERP using the `tc...`
+A peer connects to an aria-tailcat node purely through DERP using the `tcp...`
 address the server prints (look for `aria-tailcat: serving tailcat address:
-tc...` in logs). The launcher only runs the **server**; use the upstream
-`tailcat` CLI as the client — it builds from the same pinned
-`github.com/tailscale/tailcat` module:
+tcp...` in logs — the prefix is `tcp`, not `tc`). The launcher only runs the
+**server**; use the upstream `tailcat` CLI as the client. The client script
+downloads the upstream tailcat release binary (and falls back to a local
+`go build` on macOS, where no release asset is published):
 
 ```bash
 # ping the node over DERP (verifies reachability + allowlist)
-TC_ADDR=tc... ./scripts/test-client.sh
+TC_ADDR=tcp... ./scripts/test-client.sh
 
 # optionally forward a local port to the server's forwarded port and probe it
-TC_ADDR=tc... PORT=8080 ./scripts/test-client.sh
+TC_ADDR=tcp... PORT=8080 ./scripts/test-client.sh
 ```
 
 Other client subcommands (the server must serve the matching mode):
 
 ```bash
-tailcat forward 8080 tc...    # forward local :8080 to the server's :8080
-tailcat socks tc...           # SOCKS5 proxy through the tunnel
-tailcat ssh tc...             # SSH (server in ssh mode)
-echo hi | tailcat tc... 8080  # raw send to server :8080
+tailcat forward 8080 tcp...    # forward local :8080 to the server's :8080
+tailcat socks tcp...           # SOCKS5 proxy through the tunnel
+tailcat ssh tcp...             # SSH (server in ssh mode)
+echo hi | tailcat tcp... 8080  # raw send to server :8080
 ```
 
 The client also needs DERP map access (default
 `https://tailcat.dev/derpmap.json`); set `TAILCAT_DERPMAP_URL` if the server
 uses a custom DERP map. With `full_address: true` in the server config the
-`tc...` address embeds the DERP info, so clients connect without a DERP map
+`tcp...` address embeds the DERP info, so clients connect without a DERP map
 fetch.
 
 ## Build the .deb
