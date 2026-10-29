@@ -2,10 +2,6 @@
 # The Debian package installs this to /etc/aria-tailcat/config.yaml and loads it
 # automatically. Override with ARIA_TAILCAT_CONFIG in /etc/default/aria-tailcat.
 
-# Path to the tailcat binary. Empty = packaged path (/usr/lib/aria-tailcat/tailcat),
-# then PATH. Usually left empty; set ARIA_TAILCAT_BIN to override for local runs.
-# bin: /usr/lib/aria-tailcat/tailcat
-
 serve:
   # Mode selects the serve shape (maps onto `tailcat serve`):
   #   listen  - A) generic listener: print the tc... address, serve the given ports
@@ -46,7 +42,6 @@ serve:
   # verbose: false
   # json: false
 
-  # Default: an example listen mode. Edit for your deployment.
-  mode: listen
-  ports:
-    - "8080"
+  # Default: an example forward mode. Edit for your deployment.
+  mode: forward
+  forward: "8080"

@@ -45,8 +45,8 @@ serve:
   # exec:
   #   command: /usr/bin/fortune
 
-  mode: listen
-  ports: ["8080"]
+  mode: forward
+  forward: "8080"
   # key: default     # tailcat key name/path; 'new' = ephemeral
   # derpmap_url: ""  # custom DERP map URL
   # allow: []        # nodekey allowlist; empty = allow all
